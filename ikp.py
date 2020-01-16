@@ -47,18 +47,75 @@ def analysis_code(lines):
         }
         if line.startswith('#'):
             format_line['type'] = 'comment'
+            format_line['mean'] = f'注释内容：{line}'
         elif line.startswith('import'):
             format_line['type'] = 'import'
+            format_line['mean'] = f'导入: {line.split()[1]}'
         elif line.find('=') > 0:
             format_line['type'] = 'var'
+            format_line['mean'] = f'变量: {line.split("=")[0]}'
+
         elif line.startswith('def'):
             format_line['type'] = 'function'
+            format_line['mean'] = f'函数: {line.split("(")[0].lstrip("def")}'
+
 
         # 空行，函数内部代码，变量内部代码，不加入结果
         if line.startswith(' ') or line.startswith('}\n'):
             # print(results[-1])
             if results[-1]['type'] == 'function' or results[-1]['type'] == 'var':
                 results[-1]['inner_code'].append(line)
+                # 根据不同情况，分析每一行代码含义，并累加字符串
+                """分析我们的示例代码，发现主要分类如下：
+                with open(filename) as f:   打开文件
+                return data                 返回值为xx
+                if rule_k == ljt['name']:   if 判断相等，
+                    if laji in v:           判断包含关系
+                for k, v in rule.items():   for循环
+                print(k, v)                 直接调用
+                ljt['data'].append(laji)    a调用b
+                data = json.load(f)         调用某个函数，赋值给一个变量
+                """
+                # 去掉line的空格，回车，只判断具体语句
+                line = line.strip()
+                if line.startswith('#'):  # 先判断注释
+                    results[-1]['mean'] += '\n' + f"注释内容：{line}" 
+                elif line.startswith('with open'):
+                    params = line[ line.find('(')+1:line.find(')') ]
+                    if params.find(',') > 0:  # 判断是否有第二个参数
+                        left, right = params.split(',')
+                        results[-1]['mean'] += '\n' + f"用{right}的方式，打开文件{left}"  # 注意括号嵌套
+                    else:
+                        results[-1]['mean'] += '\n' + f"打开文件{params}"  # 注意括号嵌套
+                elif line.startswith('return'):
+                    results[-1]['mean'] += '\n' + f'返回{line.split()[1]}'
+                elif line.startswith('if '):  # 注意空格
+                    if line.find('==') > 0:
+                        if_left = line.split('==')[0].lstrip('if')                   
+                        if_right = line.split('==')[1].rstrip(':')                   
+                        results[-1]['mean'] += '\n' + f'判断{if_left}与{if_right}是否相等'
+                    elif line.find(' in ') > 0:  # 注意带上两边的空格
+                        if_left = line.split(' in ')[0].lstrip('if')                   
+                        if_right = line.split(' in ')[1].rstrip(':')                   
+                        results[-1]['mean'] += '\n' + f'判断{if_left}是否属于{if_right}'
+                elif line.startswith('for '):
+                    if line.find(' in ') > 0:  # 注意带上两边的空格
+                        for_left = line.split(' in ')[0].lstrip('for')                   
+                        for_right = line.split(' in ')[1].rstrip(':')                   
+                        results[-1]['mean'] += '\n' + f'循环{for_right}中的{for_left}'
+                elif line.find('=') > 0 and line.find('(') > 0:  # 判断函数调用关系，过滤变量定义
+                    if line.find('.') > 0 and line.find('.json') < 0:  # 找到调用函数的代码, 过滤文件后缀
+                        left = line.split('=')[0]                   
+                        right_a, right_b = line.split('=')[1].split('.')                   
+                        results[-1]['mean'] += '\n' + f'{right_a}调用{right_b}，并赋值给{left}'
+                    else:
+                        left, right = line.split('=')                   
+                        results[-1]['mean'] += '\n' + f'调用{right}，并赋值给{left}'
+                elif line.find('(') > 0: # 最后判断直接调用的语句
+                    results[-1]['mean'] += '\n' + f'直接调用{line}'
+                else:
+                    results[-1]['mean'] += '\n' + f'{line}'
+
         elif line.startswith('\n'):
             pass  # 空行直接掠过
         else:
@@ -88,4 +145,6 @@ if __name__ == "__main__":
     print(f'- 共{len(comment_list)}个注释')
     print(f'- 共{len(function_list)}个函数：')
     for f in function_list:
+        print(f'-'*50)
         print(f'line:{f["line"]}', f['str'].strip())
+        print(f['mean'])
